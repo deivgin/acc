@@ -4,7 +4,6 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -142,12 +141,12 @@ def trajectory_3d(
     fig = plt.figure(figsize=figsize)
     ax: Axes3D = fig.add_subplot(111, projection="3d")  # type: ignore[assignment]
 
-    scatter = ax.scatter(lon, lat, alt, c=alt, cmap="viridis", s=1)
+    scatter = ax.scatter(lon, lat, alt, c=alt, cmap="viridis", s=1)  # type: ignore[attr-defined]
     ax.plot(lon, lat, alt, alpha=0.3, linewidth=0.5)
 
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    ax.set_zlabel("Altitude")  # type: ignore[attr-defined]
+    ax.set_zlabel("Altitude")
     ax.set_title(title)
     fig.colorbar(scatter, ax=ax, label=colorbar_label, shrink=0.6)
     fig.tight_layout()

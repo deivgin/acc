@@ -73,13 +73,13 @@ def _plot_preset(data: dict, preset_name: str) -> plotting.Figure:
 
     if preset["plot"] == "subplots":
         values = {f: _extract_field(rows, f) for f in preset["fields"]}
-        return plotting.subplots(time, values, title=preset["title"])
+        return plotting.subplots(time, values, title=preset["title"])  # type: ignore
 
     # Default: time_series
     values = {f: _extract_field(rows, f) for f in preset["fields"]}
     return plotting.time_series(
         time,
-        values,
+        values,  # type: ignore
         title=preset["title"],
         ylabel=preset.get("ylabel", ""),
     )
@@ -103,9 +103,11 @@ def _plot_generic(data: dict, msg_type: str, fields: list[str]) -> plotting.Figu
 
     if len(fields) > 3:
         return plotting.subplots(
-            time, values, title=f"{msg_type} — {', '.join(fields)}"
+            time,
+            values,  # type: ignore
+            title=f"{msg_type} — {', '.join(fields)}",
         )
-    return plotting.time_series(time, values, title=f"{msg_type} — {', '.join(fields)}")
+    return plotting.time_series(time, values, title=f"{msg_type} — {', '.join(fields)}")  # type: ignore
 
 
 def main() -> None:
