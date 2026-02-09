@@ -8,11 +8,13 @@ dependencies = [
     "pymavlink>=2.4",
     "matplotlib>=3.8",
     "numpy>=1.26",
+    "pydantic>=2.5",
 ]
 
 [project.scripts]
 parse-log = "acc.log_parser:main"
 plot-log = "acc.plot_log:main"
+calc-aero = "acc.calc_aero:main"
 
 [project.optional-dependencies]
 dev = [
