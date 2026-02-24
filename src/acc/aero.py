@@ -26,7 +26,7 @@ def _extract_time_and_field(
     rows: list[dict[str, Any]], field: str
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract time (seconds) and a named field from message rows."""
-    time = np.array([float(r["TimeUS"]) / 1e6 for r in rows])
+    time = np.array([float(r["TimeMS"]) / 1e3 for r in rows])
     values = np.array([float(r[field]) for r in rows])
     return time, values
 
@@ -44,7 +44,7 @@ def _interpolate_to_common_time(
     gps_rows = log_data["GPS"]
 
     # Reference time grid from ATT
-    t_att = np.array([float(r["TimeUS"]) / 1e6 for r in att_rows])
+    t_att = np.array([float(r["TimeMS"]) / 1e3 for r in att_rows])
 
     # ATT fields (already on reference grid)
     roll = np.array([float(r["Roll"]) for r in att_rows])
@@ -67,7 +67,7 @@ def _interpolate_to_common_time(
     gyr_z_i = np.interp(t_att, t_imu, gyr_z)
 
     # GPS fields — interpolate to ATT time grid
-    t_gps = np.array([float(r["TimeUS"]) / 1e6 for r in gps_rows])
+    t_gps = np.array([float(r["TimeMS"]) / 1e3 for r in gps_rows])
     spd = np.array([float(r["Spd"]) for r in gps_rows])
     gcrs = np.array([float(r["GCrs"]) for r in gps_rows])
     vz = np.array([float(r["VZ"]) for r in gps_rows])

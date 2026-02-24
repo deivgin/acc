@@ -26,6 +26,12 @@ def main() -> None:
         help="Fixed air density (kg/m³). Default: use ISA model.",
     )
     parser.add_argument(
+        "--temperature-offset",
+        type=float,
+        default=0.0,
+        help="ISA temperature offset delta-T (K). Default: 0.0",
+    )
+    parser.add_argument(
         "--output",
         default=None,
         help="Save results to CSV file",
@@ -53,7 +59,9 @@ def main() -> None:
         config_data = json.load(f)
 
     aircraft = AircraftConfig(**config_data)
-    atmosphere = AtmosphereConfig(rho=args.rho)
+    atmosphere = AtmosphereConfig(
+        rho=args.rho, temperature_offset=args.temperature_offset
+    )
 
     # Parse log (need ATT, IMU, GPS)
     print(f"Parsing '{log_path.name}'...")
@@ -82,19 +90,21 @@ def main() -> None:
     # Save CSV
     if args.output:
         header = "time,cl,cd,cy,c_roll,cm,cn,alpha,beta,q_dyn,airspeed"
-        data = np.column_stack([
-            result.time,
-            result.cl,
-            result.cd,
-            result.cy,
-            result.c_roll,
-            result.cm,
-            result.cn,
-            result.alpha,
-            result.beta,
-            result.dynamic_pressure,
-            result.airspeed,
-        ])
+        data = np.column_stack(
+            [
+                result.time,
+                result.cl,
+                result.cd,
+                result.cy,
+                result.c_roll,
+                result.cm,
+                result.cn,
+                result.alpha,
+                result.beta,
+                result.dynamic_pressure,
+                result.airspeed,
+            ]
+        )
         np.savetxt(args.output, data, delimiter=",", header=header, comments="")
         print(f"\nResults saved to '{args.output}'.")
 

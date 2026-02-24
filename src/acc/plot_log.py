@@ -45,11 +45,11 @@ def _extract_field(rows: list[dict], field: str) -> list[float]:
 def _time_index(rows: list[dict]) -> list[float]:
     """Build a time axis from message rows.
 
-    Uses the TimeUS field (microseconds) if available, otherwise falls back
+    Uses the TimeMS field (milliseconds) if available, otherwise falls back
     to a simple 0-based integer index.
     """
-    if rows and "TimeUS" in rows[0]:
-        return [float(row["TimeUS"]) / 1e6 for row in rows]
+    if rows and "TimeMS" in rows[0]:
+        return [float(row["TimeMS"]) / 1e3 for row in rows]
     return list(range(len(rows)))
 
 
