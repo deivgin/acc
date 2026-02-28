@@ -34,6 +34,8 @@ def parse_log(
             continue
         fields = msg.get_fieldnames()
         row = {field: getattr(msg, field) for field in fields}
+        if hasattr(msg, "TimeMS") and "TimeMS" not in row:
+            row["TimeMS"] = msg.TimeMS
         result.setdefault(msg_type, []).append(row)
 
     return result
