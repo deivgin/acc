@@ -41,10 +41,7 @@ def parse_log(
     return result
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Parse ArduPilot .bin dataflash log files."
-    )
+def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("logfile", help="Path to the .bin log file")
     parser.add_argument(
         "-t",
@@ -65,8 +62,9 @@ def main() -> None:
         action="store_true",
         help="Display all messages (overrides --count)",
     )
-    args = parser.parse_args()
 
+
+def run(args: argparse.Namespace) -> None:
     path = Path(args.logfile)
     if not path.exists():
         print(f"Error: File '{args.logfile}' not found.")
@@ -123,6 +121,14 @@ def main() -> None:
         print(f"\n[{msg_type}]")
         for field, value in row.items():
             print(f"  {field}: {value}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Parse ArduPilot .bin dataflash log files."
+    )
+    add_arguments(parser)
+    run(parser.parse_args())
 
 
 if __name__ == "__main__":

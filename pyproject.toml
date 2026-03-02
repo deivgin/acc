@@ -12,9 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-parse-log = "acc.log_parser:main"
-plot-log = "acc.plot_log:main"
-calc-aero = "acc.calc_aero:main"
+acc = "acc.cli:main"
 
 [project.optional-dependencies]
 dev = [

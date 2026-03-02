@@ -110,10 +110,7 @@ def _plot_generic(data: dict, msg_type: str, fields: list[str]) -> plotting.Figu
     return plotting.time_series(time, values, title=f"{msg_type} — {', '.join(fields)}")  # type: ignore
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Plot data from ArduPilot .bin dataflash log files.",
-    )
+def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("logfile", help="Path to the .bin log file")
     parser.add_argument(
         "preset",
@@ -139,8 +136,9 @@ def main() -> None:
         default=None,
         help="Save plot to file instead of showing interactively",
     )
-    args = parser.parse_args()
 
+
+def run(args: argparse.Namespace) -> None:
     path = Path(args.logfile)
     if not path.exists():
         print(f"Error: File '{args.logfile}' not found.")
@@ -152,7 +150,8 @@ def main() -> None:
     elif args.type:
         filter_type = args.type
     else:
-        parser.error("Provide a preset (att, gps, imu, baro) or --type with --fields.")
+        print("Error: Provide a preset (att, gps, imu, baro) or --type with --fields.")
+        sys.exit(2)
 
     print(f"Parsing '{path.name}'...")
     data = parse_log(str(path), message_type=filter_type)
@@ -165,7 +164,8 @@ def main() -> None:
         fig = _plot_preset(data, args.preset)
     else:
         if not args.fields:
-            parser.error("--fields is required when using --type.")
+            print("Error: --fields is required when using --type.")
+            sys.exit(2)
         fields = [f.strip() for f in args.fields.split(",")]
         fig = _plot_generic(data, args.type, fields)
 
@@ -174,6 +174,14 @@ def main() -> None:
         print(f"Plot saved to '{args.save}'.")
     else:
         plotting.show()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Plot data from ArduPilot .bin dataflash log files.",
+    )
+    add_arguments(parser)
+    run(parser.parse_args())
 
 
 if __name__ == "__main__":

@@ -13,10 +13,7 @@ from acc.log_parser import parse_log
 from acc.models import AircraftConfig, AtmosphereConfig
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Compute aerodynamic coefficients from ArduPilot .bin log files.",
-    )
+def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("logfile", help="Path to the .bin log file")
     parser.add_argument("config", help="Path to aircraft config JSON file")
     parser.add_argument(
@@ -41,8 +38,9 @@ def main() -> None:
         action="store_true",
         help="Show interactive coefficient plots",
     )
-    args = parser.parse_args()
 
+
+def run(args: argparse.Namespace) -> None:
     # Validate log file
     log_path = Path(args.logfile)
     if not log_path.exists():
@@ -133,6 +131,14 @@ def main() -> None:
             ylabel="Angle (rad)",
         )
         plotting.show()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Compute aerodynamic coefficients from ArduPilot .bin log files.",
+    )
+    add_arguments(parser)
+    run(parser.parse_args())
 
 
 if __name__ == "__main__":

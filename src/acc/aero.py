@@ -136,9 +136,7 @@ def _ned_to_body(
     return u, v, w
 
 
-def _compute_airspeed(
-    u: np.ndarray, v: np.ndarray, w: np.ndarray
-) -> np.ndarray:
+def _compute_airspeed(u: np.ndarray, v: np.ndarray, w: np.ndarray) -> np.ndarray:
     """Compute true airspeed: V_TAS = sqrt(u² + v² + w²)."""
     return np.sqrt(u**2 + v**2 + w**2)
 
@@ -169,9 +167,7 @@ def _isa_density(altitude: np.ndarray, temperature_offset: float = 0.0) -> np.nd
     return rho
 
 
-def _compute_dynamic_pressure(
-    rho: np.ndarray, v_tas: np.ndarray
-) -> np.ndarray:
+def _compute_dynamic_pressure(rho: np.ndarray, v_tas: np.ndarray) -> np.ndarray:
     """Compute dynamic pressure: q = 0.5 * rho * V²."""
     return 0.5 * rho * v_tas**2
 
@@ -251,9 +247,7 @@ def _normalize_coefficients(
     n_moment: np.ndarray,
     q_dyn: np.ndarray,
     aircraft: AircraftConfig,
-) -> tuple[
-    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
-]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Normalize forces/moments to non-dimensional coefficients.
 
     CL = L / (q·S)
@@ -296,9 +290,7 @@ def extract_flight_state(
     """
     for msg_type in ("ATT", "IMU", "GPS"):
         if msg_type not in log_data or not log_data[msg_type]:
-            raise ValueError(
-                f"Log data missing required '{msg_type}' messages."
-            )
+            raise ValueError(f"Log data missing required '{msg_type}' messages.")
 
     interpolated = _interpolate_to_common_time(log_data)
     return FlightState(**interpolated)
@@ -307,7 +299,7 @@ def extract_flight_state(
 def compute_coefficients(
     state: FlightState,
     aircraft: AircraftConfig,
-    atmosphere: AtmosphereConfig | None = None,
+    atmosphere: AtmosphereConfig,
 ) -> AeroCoefficients:
     """Run the full physics pipeline to compute aerodynamic coefficients.
 
@@ -324,8 +316,12 @@ def compute_coefficients(
 
     # Step 1: NED to body velocity
     u, v, w = _ned_to_body(
-        state.v_north, state.v_east, state.v_down,
-        state.phi, state.theta, state.psi,
+        state.v_north,
+        state.v_east,
+        state.v_down,
+        state.phi,
+        state.theta,
+        state.psi,
     )
 
     # Step 2: Airspeed, alpha, beta
@@ -350,15 +346,31 @@ def compute_coefficients(
 
     # Step 6: Angular accelerations and body moments
     p_dot, q_dot, r_dot = _compute_angular_acceleration(
-        state.p, state.q, state.r, state.time,
+        state.p,
+        state.q,
+        state.r,
+        state.time,
     )
     l_moment, m_moment, n_moment = _compute_body_moments(
-        state.p, state.q, state.r, p_dot, q_dot, r_dot, aircraft,
+        state.p,
+        state.q,
+        state.r,
+        p_dot,
+        q_dot,
+        r_dot,
+        aircraft,
     )
 
     # Step 7: Normalize to coefficients
     cl, cd, cy, c_roll, cm, cn = _normalize_coefficients(
-        lift, drag, side, l_moment, m_moment, n_moment, q_dyn, aircraft,
+        lift,
+        drag,
+        side,
+        l_moment,
+        m_moment,
+        n_moment,
+        q_dyn,
+        aircraft,
     )
 
     return AeroCoefficients(
@@ -379,7 +391,7 @@ def compute_coefficients(
 def compute_from_log(
     log_data: dict[str, list[dict[str, Any]]],
     aircraft: AircraftConfig,
-    atmosphere: AtmosphereConfig | None = None,
+    atmosphere: AtmosphereConfig,
 ) -> AeroCoefficients:
     """Convenience end-to-end wrapper: log data -> aerodynamic coefficients."""
     state = extract_flight_state(log_data)
