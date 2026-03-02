@@ -67,7 +67,7 @@ def _interpolate_to_common_time(
     gyr_z_i = np.interp(t_att, t_imu, gyr_z)
 
     # GPS fields — interpolate to ATT time grid
-    t_gps = np.array([float(r["TimeMS"]) / 1e3 for r in gps_rows])
+    t_gps = np.array([float(r["T"]) / 1e3 for r in gps_rows])
     spd = np.array([float(r["Spd"]) for r in gps_rows])
     gcrs = np.array([float(r["GCrs"]) for r in gps_rows])
     vz = np.array([float(r["VZ"]) for r in gps_rows])
