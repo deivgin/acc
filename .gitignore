@@ -18,6 +18,7 @@ build/
 .vscode/
 *.swp
 *.swo
+.zed/
 
 # Testing
 .pytest_cache/

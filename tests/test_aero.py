@@ -9,6 +9,7 @@ from acc.aero import (
     _compute_alpha_beta,
     _compute_angular_acceleration,
     _compute_dynamic_pressure,
+    _compute_thrust,
     _isa_density,
     _ned_to_body,
     _normalize_coefficients,
@@ -290,3 +291,121 @@ class TestIntegration:
         # Moment coefficients should be ~0 (no rotation)
         np.testing.assert_allclose(result.c_roll[valid], 0.0, atol=1e-10)
         np.testing.assert_allclose(result.cn[valid], 0.0, atol=1e-10)
+
+
+class TestComputeThrust:
+    def test_known_values(self):
+        throttle = np.array([0.0, 0.5, 1.0])
+        max_thrust = 10.0
+        result = _compute_thrust(throttle, max_thrust)
+        np.testing.assert_allclose(result, [0.0, 2.5, 10.0])
+
+    def test_quadratic_relationship(self):
+        throttle = np.array([0.25, 0.5, 0.75])
+        max_thrust = 20.0
+        expected = max_thrust * throttle**2
+        result = _compute_thrust(throttle, max_thrust)
+        np.testing.assert_allclose(result, expected)
+
+
+class TestThrustIntegration:
+    """Integration tests for thrust subtraction in the coefficient pipeline."""
+
+    def _make_level_state(self, n=200, throttle=None):
+        """Create a straight-and-level flight state."""
+        time = np.linspace(0, 10, n)
+        g = 9.80665
+        return FlightState(
+            time=time,
+            ax_body=np.zeros(n),
+            ay_body=np.zeros(n),
+            az_body=np.full(n, -g),
+            p=np.zeros(n),
+            q=np.zeros(n),
+            r=np.zeros(n),
+            phi=np.zeros(n),
+            theta=np.zeros(n),
+            psi=np.zeros(n),
+            v_north=np.full(n, 20.0),
+            v_east=np.zeros(n),
+            v_down=np.zeros(n),
+            altitude=np.full(n, 100.0),
+            throttle=throttle,
+        )
+
+    def test_thrust_changes_cd(self, aircraft):
+        """With thrust, CD should differ from the no-thrust case."""
+        n = 200
+        atm = AtmosphereConfig(rho=1.225)
+
+        # Without thrust
+        state_no_thrust = self._make_level_state(n)
+        result_no_thrust = compute_coefficients(state_no_thrust, aircraft, atm)
+
+        # With thrust
+        throttle = np.full(n, 0.5)
+        state_with_thrust = self._make_level_state(n, throttle=throttle)
+        aircraft_thrust = AircraftConfig(
+            mass=aircraft.mass,
+            wing_area=aircraft.wing_area,
+            wing_span=aircraft.wing_span,
+            mean_aero_chord=aircraft.mean_aero_chord,
+            i_xx=aircraft.i_xx,
+            i_yy=aircraft.i_yy,
+            i_zz=aircraft.i_zz,
+            i_xz=aircraft.i_xz,
+            max_thrust=15.0,
+        )
+        result_with_thrust = compute_coefficients(
+            state_with_thrust, aircraft_thrust, atm
+        )
+
+        valid = np.isfinite(result_no_thrust.cd)
+        mean_cd_no = np.nanmean(result_no_thrust.cd[valid])
+        mean_cd_yes = np.nanmean(result_with_thrust.cd[valid])
+        assert mean_cd_no != pytest.approx(mean_cd_yes, abs=1e-6)
+
+    def test_thrust_does_not_change_cl(self, aircraft):
+        """CL should remain the same since thrust acts along body x-axis."""
+        n = 200
+        atm = AtmosphereConfig(rho=1.225)
+
+        state_no_thrust = self._make_level_state(n)
+        result_no_thrust = compute_coefficients(state_no_thrust, aircraft, atm)
+
+        throttle = np.full(n, 0.5)
+        state_with_thrust = self._make_level_state(n, throttle=throttle)
+        aircraft_thrust = AircraftConfig(
+            mass=aircraft.mass,
+            wing_area=aircraft.wing_area,
+            wing_span=aircraft.wing_span,
+            mean_aero_chord=aircraft.mean_aero_chord,
+            i_xx=aircraft.i_xx,
+            i_yy=aircraft.i_yy,
+            i_zz=aircraft.i_zz,
+            i_xz=aircraft.i_xz,
+            max_thrust=15.0,
+        )
+        result_with_thrust = compute_coefficients(
+            state_with_thrust, aircraft_thrust, atm
+        )
+
+        valid = np.isfinite(result_no_thrust.cl)
+        mean_cl_no = np.nanmean(result_no_thrust.cl[valid])
+        mean_cl_yes = np.nanmean(result_with_thrust.cl[valid])
+        np.testing.assert_allclose(mean_cl_no, mean_cl_yes, atol=1e-10)
+
+    def test_no_thrust_backward_compat(self, aircraft):
+        """Without max_thrust or throttle, results are unchanged."""
+        n = 200
+        atm = AtmosphereConfig(rho=1.225)
+
+        state = self._make_level_state(n)
+        result = compute_coefficients(state, aircraft, atm)
+
+        g = 9.80665
+        q_dyn = 0.5 * 1.225 * 20.0**2
+        expected_cl = aircraft.mass * g / (q_dyn * aircraft.wing_area)
+        valid = np.isfinite(result.cl)
+        mean_cl = np.nanmean(result.cl[valid])
+        np.testing.assert_allclose(mean_cl, expected_cl, atol=0.01)

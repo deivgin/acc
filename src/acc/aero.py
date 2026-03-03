@@ -84,7 +84,7 @@ def _interpolate_to_common_time(
     v_down_i = np.interp(t_att, t_gps, v_down_gps)
     alt_i = np.interp(t_att, t_gps, alt)
 
-    return {
+    result = {
         "time": t_att,
         "ax_body": acc_x_i,
         "ay_body": acc_y_i,
@@ -100,6 +100,22 @@ def _interpolate_to_common_time(
         "v_down": v_down_i,
         "altitude": alt_i,
     }
+
+    # CTUN throttle (optional)
+    if "CTUN" in log_data and log_data["CTUN"]:
+        ctun_rows = log_data["CTUN"]
+        t_ctun, thr_out = _extract_time_and_field(ctun_rows, "ThrOut")
+        throttle_i = np.interp(t_att, t_ctun, thr_out / 100.0)
+        result["throttle"] = throttle_i
+
+    return result
+
+
+def _compute_thrust(throttle: np.ndarray, max_thrust: float) -> np.ndarray:
+    """Compute thrust force from throttle using quadratic model:
+    T = max_thrust * throttle².
+    """
+    return max_thrust * throttle**2
 
 
 def _ned_to_body(
@@ -340,6 +356,11 @@ def compute_coefficients(
     fx = mass * state.ax_body
     fy = mass * state.ay_body
     fz = mass * state.az_body
+
+    # Step 4.5: Subtract thrust (body x-axis, single motor)
+    if aircraft.max_thrust is not None and state.throttle is not None:
+        thrust = _compute_thrust(state.throttle, aircraft.max_thrust)
+        fx = fx - thrust
 
     # Step 5: Wind-frame forces
     lift, drag, side = _body_to_wind_forces(fx, fy, fz, alpha, beta)

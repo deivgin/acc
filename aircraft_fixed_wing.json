@@ -1,0 +1,11 @@
+{
+  "mass": 1.8,
+  "wing_area": 0.32,
+  "wing_span": 1.4,
+  "mean_aero_chord": 0.23,
+  "i_xx": 0.025,
+  "i_yy": 0.030,
+  "i_zz": 0.050,
+  "i_xz": 0.001,
+  "max_thrust": 12.0
+}

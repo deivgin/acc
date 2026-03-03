@@ -27,6 +27,10 @@ class AircraftConfig(BaseModel):
     i_xz: Annotated[
         float, Field(default=0.0, description="Product of inertia I_xz (kg·m²)")
     ]
+    max_thrust: Annotated[
+        float | None,
+        Field(default=None, gt=0, description="Maximum static thrust (N)"),
+    ]
 
 
 class AtmosphereConfig(BaseModel):
@@ -64,6 +68,7 @@ class FlightState(BaseModel):
     v_east: np.ndarray
     v_down: np.ndarray
     altitude: np.ndarray
+    throttle: np.ndarray | None = None  # normalized 0–1
 
 
 class AeroCoefficients(BaseModel):
