@@ -1,7 +1,6 @@
 """CLI command for computing aerodynamic coefficients from ArduPilot logs."""
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -9,7 +8,8 @@ import numpy as np
 
 from acc import plotting
 from acc.log_parser import compute_from_log, parse_log
-from acc.models import AircraftConfig, AtmosphereConfig
+from model.aircraft_model import AircraftModel
+from model.atmosphere_model import AtmosphereModel
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -52,11 +52,18 @@ def run(args: argparse.Namespace) -> None:
         print(f"Error: Config file '{args.config}' not found.")
         sys.exit(1)
 
-    with open(config_path) as f:
-        config_data = json.load(f)
-
-    aircraft = AircraftConfig(**config_data)
-    atmosphere = AtmosphereConfig(
+    aircraft = AircraftModel(
+        mass=1.8,
+        wing_area=0.32,
+        wing_span=1.4,
+        mean_aero_chord=0.23,
+        i_xx=0.025,
+        i_yy=0.030,
+        i_zz=0.050,
+        i_xz=0.001,
+        max_thrust=12.0,
+    )
+    atmosphere = AtmosphereModel(
         rho=args.rho, temperature_offset=args.temperature_offset
     )
 

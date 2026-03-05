@@ -9,7 +9,10 @@ from typing import Any
 import numpy as np
 from pymavlink import mavutil
 
-from acc.models import AeroCoefficients, AircraftConfig, AtmosphereConfig, FlightState
+from model.aero_coefficients import AeroCoefficients
+from model.aircraft_model import AircraftModel
+from model.atmosphere_model import AtmosphereModel
+from model.flight_state import FlightState
 
 
 def parse_log(
@@ -150,8 +153,8 @@ def extract_flight_state(
 
 def compute_from_log(
     log_data: dict[str, list[dict[str, Any]]],
-    aircraft: AircraftConfig,
-    atmosphere: AtmosphereConfig,
+    aircraft: AircraftModel,
+    atmosphere: AtmosphereModel,
 ) -> AeroCoefficients:
     """Convenience end-to-end wrapper: log data -> aerodynamic coefficients."""
     from acc.aero import compute_coefficients
