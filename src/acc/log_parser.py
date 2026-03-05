@@ -157,7 +157,7 @@ def compute_from_log(
     atmosphere: AtmosphereModel,
 ) -> AeroCoefficients:
     """Convenience end-to-end wrapper: log data -> aerodynamic coefficients."""
-    from acc.aero import compute_coefficients
+    from aero.compute_coefficients import compute_coefficients
 
     state = extract_flight_state(log_data)
     return compute_coefficients(state, aircraft, atmosphere)
