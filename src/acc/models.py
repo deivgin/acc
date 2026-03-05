@@ -44,7 +44,7 @@ class AtmosphereConfig(BaseModel):
         ),
     ]
     temperature_offset: Annotated[
-        float,
+        float | None,
         Field(default=0.0, description="ISA temperature offset delta-T (K)"),
     ]
 

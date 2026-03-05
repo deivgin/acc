@@ -21,6 +21,7 @@ import json
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 # Add src to path for imports
@@ -38,9 +39,7 @@ def _cosine_blend(t: np.ndarray, t0: float, t1: float) -> np.ndarray:
     return 0.5 * (1.0 - np.cos(np.pi * frac))
 
 
-def _piecewise_profile(
-    t: np.ndarray, v1: float, v2: float, v3: float
-) -> np.ndarray:
+def _piecewise_profile(t: np.ndarray, v1: float, v2: float, v3: float) -> np.ndarray:
     """Three-phase piecewise profile with cosine transitions.
 
     Phase 1: 0-10 s, Transition: 10-12 s, Phase 2: 12-22 s,
@@ -178,7 +177,7 @@ def main() -> int:
     aircraft_with_thrust = AircraftConfig(**config_data)
     config_no_thrust = {k: v for k, v in config_data.items() if k != "max_thrust"}
     aircraft_no_thrust = AircraftConfig(**config_no_thrust)
-    atmosphere = AtmosphereConfig()
+    atmosphere = AtmosphereConfig(rho=None, temperature_offset=0.0)
 
     # Generate synthetic flight data
     log_data = generate_flight_data(dt=0.02, noise_scale=0.0)
@@ -260,7 +259,80 @@ def main() -> int:
     else:
         print("Some checks FAILED.")
 
+    # --- Plots ---
+    plot_results(result_nt, result_wt)
+
     return 0 if all_pass else 1
+
+
+def plot_results(result_nt: "AeroCoefficients", result_wt: "AeroCoefficients") -> None:
+    """Plot aero coefficients, flight state, and thrust correction comparison."""
+    t = result_nt.time  # already in seconds
+
+    fig, axes = plt.subplots(3, 2, figsize=(12, 10), sharex=True)
+
+    # CL comparison
+    ax = axes[0, 0]
+    ax.plot(t, result_nt.cl, label="No thrust corr.")
+    ax.plot(t, result_wt.cl, label="With thrust corr.", linestyle="--")
+    ax.set_ylabel("CL")
+    ax.legend()
+    ax.set_title("Lift Coefficient")
+    ax.grid(True, alpha=0.3)
+
+    # CD comparison
+    ax = axes[0, 1]
+    ax.plot(t, result_nt.cd, label="No thrust corr.")
+    ax.plot(t, result_wt.cd, label="With thrust corr.", linestyle="--")
+    ax.set_ylabel("CD")
+    ax.legend()
+    ax.set_title("Drag Coefficient")
+    ax.grid(True, alpha=0.3)
+
+    # Alpha & Beta
+    ax = axes[1, 0]
+    ax.plot(t, np.degrees(result_nt.alpha), label="alpha")
+    ax.plot(t, np.degrees(result_nt.beta), label="beta")
+    ax.set_ylabel("Angle (deg)")
+    ax.legend()
+    ax.set_title("Angle of Attack & Sideslip")
+    ax.grid(True, alpha=0.3)
+
+    # Airspeed & dynamic pressure
+    ax = axes[1, 1]
+    ax.plot(t, result_nt.airspeed, label="TAS")
+    ax.set_ylabel("Airspeed (m/s)")
+    ax.legend(loc="upper left")
+    ax.set_title("True Airspeed & Dynamic Pressure")
+    ax.grid(True, alpha=0.3)
+    ax2 = ax.twinx()
+    ax2.plot(t, result_nt.dynamic_pressure, color="tab:orange", label="q")
+    ax2.set_ylabel("q (Pa)")
+    ax2.legend(loc="upper right")
+
+    # Pitch moment
+    ax = axes[2, 0]
+    ax.plot(t, result_nt.cm, label="Cm (no thrust)")
+    ax.plot(t, result_wt.cm, label="Cm (with thrust)", linestyle="--")
+    ax.set_ylabel("Cm")
+    ax.set_xlabel("Time (s)")
+    ax.legend()
+    ax.set_title("Pitching Moment Coefficient")
+    ax.grid(True, alpha=0.3)
+
+    # Yaw & roll moments
+    ax = axes[2, 1]
+    ax.plot(t, result_nt.cn, label="Cn")
+    ax.plot(t, result_nt.c_roll, label="Cl (roll)")
+    ax.set_ylabel("Coefficient")
+    ax.set_xlabel("Time (s)")
+    ax.legend()
+    ax.set_title("Yaw & Roll Moment Coefficients")
+    ax.grid(True, alpha=0.3)
+
+    fig.suptitle("Synthetic Fixed-Wing — Aero Pipeline Results", fontsize=14)
+    fig.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
