@@ -27,7 +27,7 @@ import numpy as np
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from acc.aero import compute_from_log
+from acc.log_parser import compute_from_log
 from acc.models import AircraftConfig, AtmosphereConfig
 
 G = 9.80665  # m/s²
@@ -75,7 +75,7 @@ def generate_flight_data(
 
     # NED velocities (flying north, wings level)
     v_north = v_ground
-    v_east = np.zeros(n)
+    # v_east = np.zeros(n)
     v_down = -vz  # NED convention: down is positive
 
     # Pitch angle (theta) from desired alpha and velocity components

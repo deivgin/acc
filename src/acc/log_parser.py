@@ -1,4 +1,4 @@
-"""ArduPilot .bin dataflash log parser."""
+"""ArduPilot .bin dataflash log parser and flight state extraction."""
 
 import argparse
 import sys
@@ -6,7 +6,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from pymavlink import mavutil
+
+from acc.models import AeroCoefficients, AircraftConfig, AtmosphereConfig, FlightState
 
 
 def parse_log(
@@ -39,6 +42,122 @@ def parse_log(
         result.setdefault(msg_type, []).append(row)
 
     return result
+
+
+def _extract_time_and_field(
+    rows: list[dict[str, Any]], field: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """Extract time (seconds) and a named field from message rows."""
+    time = np.array([float(r["TimeMS"]) / 1e3 for r in rows])
+    values = np.array([float(r[field]) for r in rows])
+    return time, values
+
+
+def _interpolate_to_common_time(
+    log_data: dict[str, list[dict[str, Any]]],
+) -> dict[str, np.ndarray]:
+    """Align ATT, IMU, and GPS data onto a common time grid using np.interp.
+
+    Uses the ATT message timestamps as the reference grid since ATT provides
+    the attitude data needed throughout the pipeline.
+    """
+    att_rows = log_data["ATT"]
+    imu_rows = log_data["IMU"]
+    gps_rows = log_data["GPS"]
+
+    # Reference time grid from ATT
+    t_att = np.array([float(r["TimeMS"]) / 1e3 for r in att_rows])
+
+    # ATT fields (already on reference grid)
+    roll = np.array([float(r["Roll"]) for r in att_rows])
+    pitch = np.array([float(r["Pitch"]) for r in att_rows])
+    yaw = np.array([float(r["Yaw"]) for r in att_rows])
+
+    # IMU fields — interpolate to ATT time grid
+    t_imu, acc_x = _extract_time_and_field(imu_rows, "AccX")
+    _, acc_y = _extract_time_and_field(imu_rows, "AccY")
+    _, acc_z = _extract_time_and_field(imu_rows, "AccZ")
+    _, gyr_x = _extract_time_and_field(imu_rows, "GyrX")
+    _, gyr_y = _extract_time_and_field(imu_rows, "GyrY")
+    _, gyr_z = _extract_time_and_field(imu_rows, "GyrZ")
+
+    acc_x_i = np.interp(t_att, t_imu, acc_x)
+    acc_y_i = np.interp(t_att, t_imu, acc_y)
+    acc_z_i = np.interp(t_att, t_imu, acc_z)
+    gyr_x_i = np.interp(t_att, t_imu, gyr_x)
+    gyr_y_i = np.interp(t_att, t_imu, gyr_y)
+    gyr_z_i = np.interp(t_att, t_imu, gyr_z)
+
+    # GPS fields — interpolate to ATT time grid
+    t_gps = np.array([float(r["T"]) / 1e3 for r in gps_rows])
+    spd = np.array([float(r["Spd"]) for r in gps_rows])
+    gcrs = np.array([float(r["GCrs"]) for r in gps_rows])
+    vz = np.array([float(r["VZ"]) for r in gps_rows])
+    alt = np.array([float(r["Alt"]) for r in gps_rows])
+
+    # GPS velocity: NED components
+    gcrs_rad = np.radians(gcrs)
+    v_north_gps = spd * np.cos(gcrs_rad)
+    v_east_gps = spd * np.sin(gcrs_rad)
+    v_down_gps = -vz  # VZ is positive up in ArduPilot GPS
+
+    v_north_i = np.interp(t_att, t_gps, v_north_gps)
+    v_east_i = np.interp(t_att, t_gps, v_east_gps)
+    v_down_i = np.interp(t_att, t_gps, v_down_gps)
+    alt_i = np.interp(t_att, t_gps, alt)
+
+    result = {
+        "time": t_att,
+        "ax_body": acc_x_i,
+        "ay_body": acc_y_i,
+        "az_body": acc_z_i,
+        "p": gyr_x_i,
+        "q": gyr_y_i,
+        "r": gyr_z_i,
+        "phi": np.radians(roll),
+        "theta": np.radians(pitch),
+        "psi": np.radians(yaw),
+        "v_north": v_north_i,
+        "v_east": v_east_i,
+        "v_down": v_down_i,
+        "altitude": alt_i,
+    }
+
+    # CTUN throttle (optional)
+    if "CTUN" in log_data and log_data["CTUN"]:
+        ctun_rows = log_data["CTUN"]
+        t_ctun, thr_out = _extract_time_and_field(ctun_rows, "ThrOut")
+        throttle_i = np.interp(t_att, t_ctun, thr_out / 100.0)
+        result["throttle"] = throttle_i
+
+    return result
+
+
+def extract_flight_state(
+    log_data: dict[str, list[dict[str, Any]]],
+) -> FlightState:
+    """Convert parse_log() output to a unified FlightState.
+
+    Requires ATT, IMU, and GPS message types in the log data.
+    """
+    for msg_type in ("ATT", "IMU", "GPS"):
+        if msg_type not in log_data or not log_data[msg_type]:
+            raise ValueError(f"Log data missing required '{msg_type}' messages.")
+
+    interpolated = _interpolate_to_common_time(log_data)
+    return FlightState(**interpolated)
+
+
+def compute_from_log(
+    log_data: dict[str, list[dict[str, Any]]],
+    aircraft: AircraftConfig,
+    atmosphere: AtmosphereConfig,
+) -> AeroCoefficients:
+    """Convenience end-to-end wrapper: log data -> aerodynamic coefficients."""
+    from acc.aero import compute_coefficients
+
+    state = extract_flight_state(log_data)
+    return compute_coefficients(state, aircraft, atmosphere)
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:

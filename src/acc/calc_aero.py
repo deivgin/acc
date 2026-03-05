@@ -8,8 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from acc import plotting
-from acc.aero import compute_from_log
-from acc.log_parser import parse_log
+from acc.log_parser import compute_from_log, parse_log
 from acc.models import AircraftConfig, AtmosphereConfig
 
 

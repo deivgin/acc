@@ -14,8 +14,8 @@ from acc.aero import (
     _ned_to_body,
     _normalize_coefficients,
     compute_coefficients,
-    extract_flight_state,
 )
+from acc.log_parser import extract_flight_state
 from acc.models import AircraftConfig, AtmosphereConfig, FlightState
 
 
