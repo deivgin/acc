@@ -3,25 +3,26 @@
 import numpy as np
 import pytest
 
-from acc.aero import (
-    _body_to_wind_forces,
-    _compute_airspeed,
-    _compute_alpha_beta,
-    _compute_angular_acceleration,
-    _compute_dynamic_pressure,
-    _compute_thrust,
-    _isa_density,
-    _ned_to_body,
-    _normalize_coefficients,
-    compute_coefficients,
+from acc.aero.frames import body_to_wind_forces, ned_to_body
+from acc.aero.physics import (
+    compute_airspeed,
+    compute_alpha_beta,
+    compute_angular_acceleration,
+    compute_dynamic_pressure,
+    compute_thrust,
+    compute_isa_density,
+    normalize_coefficients,
 )
+from acc.aero.compute_coefficients import compute_coefficients
 from acc.log_parser import extract_flight_state
-from acc.models import AircraftConfig, AtmosphereConfig, FlightState
+from acc.model.aircraft_model import AircraftModel
+from acc.model.atmosphere_model import AtmosphereModel
+from acc.model.flight_state import FlightState
 
 
 @pytest.fixture
 def aircraft():
-    return AircraftConfig(
+    return AircraftModel(
         mass=1.5,
         wing_area=0.35,
         wing_span=1.4,
@@ -35,17 +36,17 @@ def aircraft():
 
 class TestISADensity:
     def test_sea_level(self):
-        rho = _isa_density(np.array([0.0]))
+        rho = compute_isa_density(np.array([0.0]))
         np.testing.assert_allclose(rho, [1.225], atol=0.001)
 
     def test_decreases_with_altitude(self):
         alt = np.array([0.0, 1000.0, 5000.0])
-        rho = _isa_density(alt)
+        rho = compute_isa_density(alt)
         assert rho[0] > rho[1] > rho[2]
 
     def test_temperature_offset(self):
-        rho_standard = _isa_density(np.array([1000.0]))
-        rho_hot = _isa_density(np.array([1000.0]), temperature_offset=20.0)
+        rho_standard = compute_isa_density(np.array([1000.0]))
+        rho_hot = compute_isa_density(np.array([1000.0]), temperature_offset=20.0)
         # Hotter atmosphere -> lower density
         assert rho_hot[0] < rho_standard[0]
 
@@ -57,7 +58,7 @@ class TestNEDToBody:
         ve = np.array([0.0])
         vd = np.array([0.0])
         phi = theta = psi = np.array([0.0])
-        u, v, w = _ned_to_body(vn, ve, vd, phi, theta, psi)
+        u, v, w = ned_to_body(vn, ve, vd, phi, theta, psi)
         np.testing.assert_allclose(u, [10.0], atol=1e-10)
         np.testing.assert_allclose(v, [0.0], atol=1e-10)
         np.testing.assert_allclose(w, [0.0], atol=1e-10)
@@ -69,7 +70,7 @@ class TestNEDToBody:
         vd = np.array([0.0])
         phi = theta = np.array([0.0])
         psi = np.array([np.pi / 2])
-        u, v, w = _ned_to_body(vn, ve, vd, phi, theta, psi)
+        u, v, w = ned_to_body(vn, ve, vd, phi, theta, psi)
         np.testing.assert_allclose(u, [0.0], atol=1e-10)
         np.testing.assert_allclose(v, [-10.0], atol=1e-10)
         np.testing.assert_allclose(w, [0.0], atol=1e-10)
@@ -82,7 +83,7 @@ class TestNEDToBody:
         phi = np.array([0.3])
         theta = np.array([0.2])
         psi = np.array([1.0])
-        u, v, w = _ned_to_body(vn, ve, vd, phi, theta, psi)
+        u, v, w = ned_to_body(vn, ve, vd, phi, theta, psi)
         speed_ned = np.sqrt(vn**2 + ve**2 + vd**2)
         speed_body = np.sqrt(u**2 + v**2 + w**2)
         np.testing.assert_allclose(speed_body, speed_ned, atol=1e-10)
@@ -94,9 +95,9 @@ class TestAirspeedAlphaBeta:
         u = np.array([20.0])
         v = np.array([0.0])
         w = np.array([0.0])
-        v_tas = _compute_airspeed(u, v, w)
+        v_tas = compute_airspeed(u, v, w)
         np.testing.assert_allclose(v_tas, [20.0])
-        alpha, beta = _compute_alpha_beta(u, v, w, v_tas)
+        alpha, beta = compute_alpha_beta(u, v, w, v_tas)
         np.testing.assert_allclose(alpha, [0.0], atol=1e-10)
         np.testing.assert_allclose(beta, [0.0], atol=1e-10)
 
@@ -105,8 +106,8 @@ class TestAirspeedAlphaBeta:
         u = np.array([20.0])
         v = np.array([0.0])
         w = np.array([2.0])
-        v_tas = _compute_airspeed(u, v, w)
-        alpha, beta = _compute_alpha_beta(u, v, w, v_tas)
+        v_tas = compute_airspeed(u, v, w)
+        alpha, beta = compute_alpha_beta(u, v, w, v_tas)
         assert alpha[0] > 0
         np.testing.assert_allclose(beta, [0.0], atol=1e-10)
 
@@ -115,8 +116,8 @@ class TestAirspeedAlphaBeta:
         u = np.array([20.0])
         v = np.array([2.0])
         w = np.array([0.0])
-        v_tas = _compute_airspeed(u, v, w)
-        alpha, beta = _compute_alpha_beta(u, v, w, v_tas)
+        v_tas = compute_airspeed(u, v, w)
+        alpha, beta = compute_alpha_beta(u, v, w, v_tas)
         assert beta[0] > 0
 
 
@@ -124,13 +125,13 @@ class TestDynamicPressure:
     def test_known_value(self):
         rho = np.array([1.225])
         v = np.array([20.0])
-        q = _compute_dynamic_pressure(rho, v)
+        q = compute_dynamic_pressure(rho, v)
         np.testing.assert_allclose(q, [0.5 * 1.225 * 400.0])
 
     def test_zero_speed(self):
         rho = np.array([1.225])
         v = np.array([0.0])
-        q = _compute_dynamic_pressure(rho, v)
+        q = compute_dynamic_pressure(rho, v)
         np.testing.assert_allclose(q, [0.0])
 
 
@@ -143,7 +144,7 @@ class TestBodyToWindForces:
         fz = np.array([-5.0])  # upward in body (negative z)
         alpha = np.array([0.0])
         beta = np.array([0.0])
-        lift, drag, side = _body_to_wind_forces(fx, fy, fz, alpha, beta)
+        lift, drag, side = body_to_wind_forces(fx, fy, fz, alpha, beta)
         np.testing.assert_allclose(lift, [5.0], atol=1e-10)
         np.testing.assert_allclose(drag, [10.0], atol=1e-10)
         np.testing.assert_allclose(side, [0.0], atol=1e-10)
@@ -156,7 +157,7 @@ class TestAngularAcceleration:
         p = np.full_like(t, 0.5)
         q = np.full_like(t, 0.0)
         r = np.full_like(t, 0.0)
-        p_dot, q_dot, r_dot = _compute_angular_acceleration(p, q, r, t)
+        p_dot, q_dot, r_dot = compute_angular_acceleration(p, q, r, t)
         np.testing.assert_allclose(p_dot, 0.0, atol=1e-10)
         np.testing.assert_allclose(q_dot, 0.0, atol=1e-10)
         np.testing.assert_allclose(r_dot, 0.0, atol=1e-10)
@@ -167,7 +168,7 @@ class TestAngularAcceleration:
         p = 2.0 * t  # p_dot should be ~2.0
         q = np.zeros_like(t)
         r = np.zeros_like(t)
-        p_dot, _, _ = _compute_angular_acceleration(p, q, r, t)
+        p_dot, _, _ = compute_angular_acceleration(p, q, r, t)
         # Interior points should be very close to 2.0
         np.testing.assert_allclose(p_dot[5:-5], 2.0, atol=0.01)
 
@@ -186,7 +187,7 @@ class TestNormalization:
         m_m = np.array([q_dyn[0] * s * c * 0.02])
         n_m = np.array([0.0])
 
-        cl, cd, cy, c_roll, cm, cn = _normalize_coefficients(
+        cl, cd, cy, c_roll, cm, cn = normalize_coefficients(
             lift, drag, side, l_m, m_m, n_m, q_dyn, aircraft,
         )
         np.testing.assert_allclose(cl, [0.5], atol=1e-10)
@@ -199,7 +200,7 @@ class TestNormalization:
     def test_low_q_masked(self, aircraft):
         """Dynamic pressure below threshold should produce NaN."""
         q_dyn = np.array([5.0])  # below 10 Pa threshold
-        cl, cd, cy, c_roll, cm, cn = _normalize_coefficients(
+        cl, cd, cy, c_roll, cm, cn = normalize_coefficients(
             np.array([1.0]),
             np.array([1.0]),
             np.array([0.0]),
@@ -272,7 +273,7 @@ class TestIntegration:
             altitude=altitude,
         )
 
-        atm = AtmosphereConfig(rho=1.225)
+        atm = AtmosphereModel(rho=1.225)
         result = compute_coefficients(state, aircraft, atm)
 
         # Expected CL = m*g / (q*S) = 1.5*9.80665 / (0.5*1.225*400*0.35)
@@ -297,14 +298,14 @@ class TestComputeThrust:
     def test_known_values(self):
         throttle = np.array([0.0, 0.5, 1.0])
         max_thrust = 10.0
-        result = _compute_thrust(throttle, max_thrust)
+        result = compute_thrust(throttle, max_thrust)
         np.testing.assert_allclose(result, [0.0, 2.5, 10.0])
 
     def test_quadratic_relationship(self):
         throttle = np.array([0.25, 0.5, 0.75])
         max_thrust = 20.0
         expected = max_thrust * throttle**2
-        result = _compute_thrust(throttle, max_thrust)
+        result = compute_thrust(throttle, max_thrust)
         np.testing.assert_allclose(result, expected)
 
 
@@ -336,7 +337,7 @@ class TestThrustIntegration:
     def test_thrust_changes_cd(self, aircraft):
         """With thrust, CD should differ from the no-thrust case."""
         n = 200
-        atm = AtmosphereConfig(rho=1.225)
+        atm = AtmosphereModel(rho=1.225)
 
         # Without thrust
         state_no_thrust = self._make_level_state(n)
@@ -345,7 +346,7 @@ class TestThrustIntegration:
         # With thrust
         throttle = np.full(n, 0.5)
         state_with_thrust = self._make_level_state(n, throttle=throttle)
-        aircraft_thrust = AircraftConfig(
+        aircraft_thrust = AircraftModel(
             mass=aircraft.mass,
             wing_area=aircraft.wing_area,
             wing_span=aircraft.wing_span,
@@ -368,14 +369,14 @@ class TestThrustIntegration:
     def test_thrust_does_not_change_cl(self, aircraft):
         """CL should remain the same since thrust acts along body x-axis."""
         n = 200
-        atm = AtmosphereConfig(rho=1.225)
+        atm = AtmosphereModel(rho=1.225)
 
         state_no_thrust = self._make_level_state(n)
         result_no_thrust = compute_coefficients(state_no_thrust, aircraft, atm)
 
         throttle = np.full(n, 0.5)
         state_with_thrust = self._make_level_state(n, throttle=throttle)
-        aircraft_thrust = AircraftConfig(
+        aircraft_thrust = AircraftModel(
             mass=aircraft.mass,
             wing_area=aircraft.wing_area,
             wing_span=aircraft.wing_span,
@@ -398,7 +399,7 @@ class TestThrustIntegration:
     def test_no_thrust_backward_compat(self, aircraft):
         """Without max_thrust or throttle, results are unchanged."""
         n = 200
-        atm = AtmosphereConfig(rho=1.225)
+        atm = AtmosphereModel(rho=1.225)
 
         state = self._make_level_state(n)
         result = compute_coefficients(state, aircraft, atm)

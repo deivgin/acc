@@ -1,7 +1,7 @@
 import numpy as np
 
-from aero.frames import body_to_wind_forces, ned_to_body
-from aero.physics import (
+from acc.aero.frames import body_to_wind_forces, ned_to_body
+from acc.aero.physics import (
     compute_airspeed,
     compute_alpha_beta,
     compute_angular_acceleration,
@@ -11,10 +11,10 @@ from aero.physics import (
     compute_thrust,
     normalize_coefficients,
 )
-from model.aero_coefficients import AeroCoefficients
-from model.aircraft_model import AircraftModel
-from model.atmosphere_model import AtmosphereModel
-from model.flight_state import FlightState
+from acc.model.aero_coefficients import AeroCoefficients
+from acc.model.aircraft_model import AircraftModel
+from acc.model.atmosphere_model import AtmosphereModel
+from acc.model.flight_state import FlightState
 
 
 def compute_coefficients(

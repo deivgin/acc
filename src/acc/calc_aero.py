@@ -8,8 +8,8 @@ import numpy as np
 
 from acc import plotting
 from acc.log_parser import compute_from_log, parse_log
-from model.aircraft_model import AircraftModel
-from model.atmosphere_model import AtmosphereModel
+from acc.model.aircraft_model import AircraftModel
+from acc.model.atmosphere_model import AtmosphereModel
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:

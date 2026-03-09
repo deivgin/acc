@@ -28,7 +28,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from acc.log_parser import compute_from_log
-from acc.models import AircraftConfig, AtmosphereConfig
+from acc.model.aircraft_model import AircraftModel
+from acc.model.atmosphere_model import AtmosphereModel
 
 G = 9.80665  # m/s²
 
@@ -174,10 +175,10 @@ def main() -> int:
     with open(config_path) as f:
         config_data = json.load(f)
 
-    aircraft_with_thrust = AircraftConfig(**config_data)
+    aircraft_with_thrust = AircraftModel(**config_data)
     config_no_thrust = {k: v for k, v in config_data.items() if k != "max_thrust"}
-    aircraft_no_thrust = AircraftConfig(**config_no_thrust)
-    atmosphere = AtmosphereConfig(rho=None, temperature_offset=0.0)
+    aircraft_no_thrust = AircraftModel(**config_no_thrust)
+    atmosphere = AtmosphereModel(rho=None, temperature_offset=0.0)
 
     # Generate synthetic flight data
     log_data = generate_flight_data(dt=0.02, noise_scale=0.0)

@@ -1,6 +1,6 @@
 import numpy as np
 
-from model.aircraft_model import AircraftModel
+from acc.model.aircraft_model import AircraftModel
 
 _ISA_T0 = 288.15  # K
 _ISA_P0 = 101325.0  # Pa

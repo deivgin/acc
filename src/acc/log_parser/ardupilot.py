@@ -9,10 +9,11 @@ from typing import Any
 import numpy as np
 from pymavlink import mavutil
 
-from model.aero_coefficients import AeroCoefficients
-from model.aircraft_model import AircraftModel
-from model.atmosphere_model import AtmosphereModel
-from model.flight_state import FlightState
+from acc.log_parser.common import extract_time_and_field
+from acc.model.aero_coefficients import AeroCoefficients
+from acc.model.aircraft_model import AircraftModel
+from acc.model.atmosphere_model import AtmosphereModel
+from acc.model.flight_state import FlightState
 
 
 def parse_log(
@@ -47,15 +48,6 @@ def parse_log(
     return result
 
 
-def _extract_time_and_field(
-    rows: list[dict[str, Any]], field: str
-) -> tuple[np.ndarray, np.ndarray]:
-    """Extract time (seconds) and a named field from message rows."""
-    time = np.array([float(r["TimeMS"]) / 1e3 for r in rows])
-    values = np.array([float(r[field]) for r in rows])
-    return time, values
-
-
 def _interpolate_to_common_time(
     log_data: dict[str, list[dict[str, Any]]],
 ) -> dict[str, np.ndarray]:
@@ -77,12 +69,12 @@ def _interpolate_to_common_time(
     yaw = np.array([float(r["Yaw"]) for r in att_rows])
 
     # IMU fields — interpolate to ATT time grid
-    t_imu, acc_x = _extract_time_and_field(imu_rows, "AccX")
-    _, acc_y = _extract_time_and_field(imu_rows, "AccY")
-    _, acc_z = _extract_time_and_field(imu_rows, "AccZ")
-    _, gyr_x = _extract_time_and_field(imu_rows, "GyrX")
-    _, gyr_y = _extract_time_and_field(imu_rows, "GyrY")
-    _, gyr_z = _extract_time_and_field(imu_rows, "GyrZ")
+    t_imu, acc_x = extract_time_and_field(imu_rows, "AccX")
+    _, acc_y = extract_time_and_field(imu_rows, "AccY")
+    _, acc_z = extract_time_and_field(imu_rows, "AccZ")
+    _, gyr_x = extract_time_and_field(imu_rows, "GyrX")
+    _, gyr_y = extract_time_and_field(imu_rows, "GyrY")
+    _, gyr_z = extract_time_and_field(imu_rows, "GyrZ")
 
     acc_x_i = np.interp(t_att, t_imu, acc_x)
     acc_y_i = np.interp(t_att, t_imu, acc_y)
@@ -129,7 +121,7 @@ def _interpolate_to_common_time(
     # CTUN throttle (optional)
     if "CTUN" in log_data and log_data["CTUN"]:
         ctun_rows = log_data["CTUN"]
-        t_ctun, thr_out = _extract_time_and_field(ctun_rows, "ThrOut")
+        t_ctun, thr_out = extract_time_and_field(ctun_rows, "ThrOut")
         throttle_i = np.interp(t_att, t_ctun, thr_out / 100.0)
         result["throttle"] = throttle_i
 
@@ -157,7 +149,7 @@ def compute_from_log(
     atmosphere: AtmosphereModel,
 ) -> AeroCoefficients:
     """Convenience end-to-end wrapper: log data -> aerodynamic coefficients."""
-    from aero.compute_coefficients import compute_coefficients
+    from acc.aero.compute_coefficients import compute_coefficients
 
     state = extract_flight_state(log_data)
     return compute_coefficients(state, aircraft, atmosphere)

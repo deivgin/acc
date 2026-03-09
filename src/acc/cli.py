@@ -2,7 +2,8 @@
 
 import argparse
 
-from acc import calc_aero, log_parser, plot_log
+from acc import calc_aero, plot_log
+from acc.log_parser import ardupilot as parse_log_cmd
 
 
 def main() -> None:
@@ -33,8 +34,8 @@ def main() -> None:
         "parse_log",
         help="Parse and inspect a .bin dataflash log",
     )
-    log_parser.add_arguments(p)
-    p.set_defaults(func=log_parser.run)
+    parse_log_cmd.add_arguments(p)
+    p.set_defaults(func=parse_log_cmd.run)
 
     args = parser.parse_args()
     if not hasattr(args, "func"):

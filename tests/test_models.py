@@ -4,12 +4,15 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from acc.models import AeroCoefficients, AircraftConfig, AtmosphereConfig, FlightState
+from acc.model.aero_coefficients import AeroCoefficients
+from acc.model.aircraft_model import AircraftModel
+from acc.model.atmosphere_model import AtmosphereModel
+from acc.model.flight_state import FlightState
 
 
-class TestAircraftConfig:
+class TestAircraftModel:
     def test_valid_config(self):
-        cfg = AircraftConfig(
+        cfg = AircraftModel(
             mass=1.5,
             wing_area=0.35,
             wing_span=1.4,
@@ -23,7 +26,7 @@ class TestAircraftConfig:
         assert cfg.i_xz == 0.002
 
     def test_default_i_xz(self):
-        cfg = AircraftConfig(
+        cfg = AircraftModel(
             mass=1.5,
             wing_area=0.35,
             wing_span=1.4,
@@ -36,7 +39,7 @@ class TestAircraftConfig:
 
     def test_rejects_zero_mass(self):
         with pytest.raises(ValidationError):
-            AircraftConfig(
+            AircraftModel(
                 mass=0,
                 wing_area=0.35,
                 wing_span=1.4,
@@ -48,7 +51,7 @@ class TestAircraftConfig:
 
     def test_rejects_negative_wing_area(self):
         with pytest.raises(ValidationError):
-            AircraftConfig(
+            AircraftModel(
                 mass=1.5,
                 wing_area=-0.35,
                 wing_span=1.4,
@@ -60,7 +63,7 @@ class TestAircraftConfig:
 
     def test_rejects_negative_inertia(self):
         with pytest.raises(ValidationError):
-            AircraftConfig(
+            AircraftModel(
                 mass=1.5,
                 wing_area=0.35,
                 wing_span=1.4,
@@ -72,21 +75,21 @@ class TestAircraftConfig:
 
     def test_rejects_missing_required(self):
         with pytest.raises(ValidationError):
-            AircraftConfig(mass=1.5, wing_area=0.35)  # type: ignore[call-arg]
+            AircraftModel(mass=1.5, wing_area=0.35)  # type: ignore[call-arg]
 
 
-class TestAtmosphereConfig:
+class TestAtmosphereModel:
     def test_defaults(self):
-        cfg = AtmosphereConfig()
+        cfg = AtmosphereModel()
         assert cfg.rho is None
         assert cfg.temperature_offset == 0.0
 
     def test_fixed_rho(self):
-        cfg = AtmosphereConfig(rho=1.1)
+        cfg = AtmosphereModel(rho=1.1)
         assert cfg.rho == 1.1
 
     def test_temperature_offset(self):
-        cfg = AtmosphereConfig(temperature_offset=15.0)
+        cfg = AtmosphereModel(temperature_offset=15.0)
         assert cfg.temperature_offset == 15.0
 
 
