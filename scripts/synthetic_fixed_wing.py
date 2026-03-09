@@ -1,8 +1,7 @@
 """Generate synthetic fixed-wing flight data and validate the aero pipeline.
 
 Creates a 30-second multi-phase flight profile for a Bixler-class fixed-wing UAV
-and runs it through the aerodynamic coefficient pipeline with and without thrust
-correction to demonstrate the effect of propulsive force subtraction.
+and runs it through the aerodynamic coefficient pipeline.
 
 Aircraft: small fixed-wing UAV (Bixler-class), 1.8 kg, 0.32 m² wing area.
 
@@ -17,12 +16,13 @@ Usage:
     python scripts/synthetic_fixed_wing.py
 """
 
-import json
 import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from acc.model.aero_coefficients import AeroCoefficients
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -170,40 +170,41 @@ def generate_flight_data(
 
 
 def main() -> int:
-    # Load aircraft config
-    config_path = Path(__file__).resolve().parent.parent / "aircraft_fixed_wing.json"
-    with open(config_path) as f:
-        config_data = json.load(f)
-
-    aircraft_with_thrust = AircraftModel(**config_data)
-    config_no_thrust = {k: v for k, v in config_data.items() if k != "max_thrust"}
-    aircraft_no_thrust = AircraftModel(**config_no_thrust)
+    aircraft = AircraftModel(
+        mass=1.8,
+        wing_area=0.32,
+        wing_span=1.4,
+        mean_aero_chord=0.23,
+        i_xx=0.025,
+        i_yy=0.030,
+        i_zz=0.050,
+        i_xz=0.001,
+        max_thrust=12.0,
+    )
     atmosphere = AtmosphereModel(rho=None, temperature_offset=0.0)
 
     # Generate synthetic flight data
     log_data = generate_flight_data(dt=0.02, noise_scale=0.0)
 
-    # Run pipeline: without and with thrust correction
-    result_nt = compute_from_log(log_data, aircraft_no_thrust, atmosphere)
-    result_wt = compute_from_log(log_data, aircraft_with_thrust, atmosphere)
+    # Run pipeline
+    result = compute_from_log(log_data, aircraft, atmosphere)
 
-    # --- Print comparison table ---
-    t = result_nt.time
+    # --- Print results table ---
+    t = result.time
     phase_samples = [
         ("Cruise (5s)", np.argmin(np.abs(t - 5.0))),
         ("Fast (17s)", np.argmin(np.abs(t - 17.0))),
         ("Climb (27s)", np.argmin(np.abs(t - 27.0))),
     ]
 
-    print("=" * 90)
+    print("=" * 80)
     print("Synthetic Fixed-Wing Flight Data — Aero Pipeline Validation")
-    print("=" * 90)
+    print("=" * 80)
     print()
 
     hdr = (
         f"{'Phase':<16} {'alpha':>6} {'beta':>6} {'V_TAS':>6} {'q':>7}"
-        f"  {'CL_nt':>7} {'CD_nt':>7} {'CL_wt':>7} {'CD_wt':>7}"
-        f"  {'Cm_nt':>7} {'Cn_nt':>7}"
+        f"  {'CL':>7} {'CD':>7} {'Cm':>7} {'Cn':>7}"
     )
     print(hdr)
     print("-" * len(hdr))
@@ -211,36 +212,29 @@ def main() -> int:
     for label, idx in phase_samples:
         print(
             f"{label:<16} "
-            f"{np.degrees(result_nt.alpha[idx]):6.2f} "
-            f"{np.degrees(result_nt.beta[idx]):6.2f} "
-            f"{result_nt.airspeed[idx]:6.2f} "
-            f"{result_nt.dynamic_pressure[idx]:7.1f}"
-            f"  {result_nt.cl[idx]:7.4f} {result_nt.cd[idx]:7.4f}"
-            f" {result_wt.cl[idx]:7.4f} {result_wt.cd[idx]:7.4f}"
-            f"  {result_nt.cm[idx]:7.4f} {result_nt.cn[idx]:7.4f}"
+            f"{np.degrees(result.alpha[idx]):6.2f} "
+            f"{np.degrees(result.beta[idx]):6.2f} "
+            f"{result.airspeed[idx]:6.2f} "
+            f"{result.dynamic_pressure[idx]:7.1f}"
+            f"  {result.cl[idx]:7.4f} {result.cd[idx]:7.4f}"
+            f"  {result.cm[idx]:7.4f} {result.cn[idx]:7.4f}"
         )
 
-    print()
-    print("  _nt = no thrust correction    _wt = with thrust correction")
     print()
 
     # --- Verification checks ---
     print("Verification checks (cruise phase at t=5 s):")
     idx = np.argmin(np.abs(t - 5.0))
-    cl_nt = result_nt.cl[idx]
-    cd_nt = result_nt.cd[idx]
-    cl_wt = result_wt.cl[idx]
-    cd_wt = result_wt.cd[idx]
-    alpha_val = np.degrees(result_nt.alpha[idx])
-    beta_val = np.degrees(result_nt.beta[idx])
-    cm_val = result_nt.cm[idx]
-    cn_val = result_nt.cn[idx]
+    cl = result.cl[idx]
+    cd = result.cd[idx]
+    alpha_val = np.degrees(result.alpha[idx])
+    beta_val = np.degrees(result.beta[idx])
+    cm_val = result.cm[idx]
+    cn_val = result.cn[idx]
 
     checks = [
-        ("CL (no thrust) ~ 0.40", abs(cl_nt - 0.40) < 0.02, cl_nt),
-        ("CD (no thrust) ~ 0.00", abs(cd_nt) < 0.005, cd_nt),
-        ("CL (with thrust) ~ 0.40", abs(cl_wt - 0.40) < 0.02, cl_wt),
-        ("CD (with thrust) ~ 0.07", abs(cd_wt - 0.07) < 0.01, cd_wt),
+        ("CL ~ 0.40", abs(cl - 0.40) < 0.02, cl),
+        ("CD ~ 0.07", abs(cd - 0.07) < 0.01, cd),
         ("alpha = 5 deg", abs(alpha_val - 5.0) < 0.1, alpha_val),
         ("beta ~ 0 deg", abs(beta_val) < 0.1, beta_val),
         ("Cm ~ 0 (steady)", abs(cm_val) < 0.01, cm_val),
@@ -261,39 +255,35 @@ def main() -> int:
         print("Some checks FAILED.")
 
     # --- Plots ---
-    plot_results(result_nt, result_wt)
+    plot_results(result)
 
     return 0 if all_pass else 1
 
 
-def plot_results(result_nt: "AeroCoefficients", result_wt: "AeroCoefficients") -> None:
-    """Plot aero coefficients, flight state, and thrust correction comparison."""
-    t = result_nt.time  # already in seconds
+def plot_results(result: "AeroCoefficients") -> None:
+    """Plot aero coefficients and flight state."""
+    t = result.time
 
     fig, axes = plt.subplots(3, 2, figsize=(12, 10), sharex=True)
 
-    # CL comparison
+    # CL
     ax = axes[0, 0]
-    ax.plot(t, result_nt.cl, label="No thrust corr.")
-    ax.plot(t, result_wt.cl, label="With thrust corr.", linestyle="--")
+    ax.plot(t, result.cl)
     ax.set_ylabel("CL")
-    ax.legend()
     ax.set_title("Lift Coefficient")
     ax.grid(True, alpha=0.3)
 
-    # CD comparison
+    # CD
     ax = axes[0, 1]
-    ax.plot(t, result_nt.cd, label="No thrust corr.")
-    ax.plot(t, result_wt.cd, label="With thrust corr.", linestyle="--")
+    ax.plot(t, result.cd)
     ax.set_ylabel("CD")
-    ax.legend()
     ax.set_title("Drag Coefficient")
     ax.grid(True, alpha=0.3)
 
     # Alpha & Beta
     ax = axes[1, 0]
-    ax.plot(t, np.degrees(result_nt.alpha), label="alpha")
-    ax.plot(t, np.degrees(result_nt.beta), label="beta")
+    ax.plot(t, np.degrees(result.alpha), label="alpha")
+    ax.plot(t, np.degrees(result.beta), label="beta")
     ax.set_ylabel("Angle (deg)")
     ax.legend()
     ax.set_title("Angle of Attack & Sideslip")
@@ -301,30 +291,28 @@ def plot_results(result_nt: "AeroCoefficients", result_wt: "AeroCoefficients") -
 
     # Airspeed & dynamic pressure
     ax = axes[1, 1]
-    ax.plot(t, result_nt.airspeed, label="TAS")
+    ax.plot(t, result.airspeed, label="TAS")
     ax.set_ylabel("Airspeed (m/s)")
     ax.legend(loc="upper left")
     ax.set_title("True Airspeed & Dynamic Pressure")
     ax.grid(True, alpha=0.3)
     ax2 = ax.twinx()
-    ax2.plot(t, result_nt.dynamic_pressure, color="tab:orange", label="q")
+    ax2.plot(t, result.dynamic_pressure, color="tab:orange", label="q")
     ax2.set_ylabel("q (Pa)")
     ax2.legend(loc="upper right")
 
     # Pitch moment
     ax = axes[2, 0]
-    ax.plot(t, result_nt.cm, label="Cm (no thrust)")
-    ax.plot(t, result_wt.cm, label="Cm (with thrust)", linestyle="--")
+    ax.plot(t, result.cm)
     ax.set_ylabel("Cm")
     ax.set_xlabel("Time (s)")
-    ax.legend()
     ax.set_title("Pitching Moment Coefficient")
     ax.grid(True, alpha=0.3)
 
     # Yaw & roll moments
     ax = axes[2, 1]
-    ax.plot(t, result_nt.cn, label="Cn")
-    ax.plot(t, result_nt.c_roll, label="Cl (roll)")
+    ax.plot(t, result.cn, label="Cn")
+    ax.plot(t, result.c_roll, label="Cl (roll)")
     ax.set_ylabel("Coefficient")
     ax.set_xlabel("Time (s)")
     ax.legend()

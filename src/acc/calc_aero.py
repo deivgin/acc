@@ -46,12 +46,6 @@ def run(args: argparse.Namespace) -> None:
         print(f"Error: File '{args.logfile}' not found.")
         sys.exit(1)
 
-    # Load aircraft config
-    config_path = Path(args.config)
-    if not config_path.exists():
-        print(f"Error: Config file '{args.config}' not found.")
-        sys.exit(1)
-
     aircraft = AircraftModel(
         mass=1.8,
         wing_area=0.32,

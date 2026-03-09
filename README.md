@@ -85,6 +85,7 @@ calc-aero flight.bin aircraft.json --rho 1.1         # fixed air density
 | `mean_aero_chord` | m | Mean aerodynamic chord (c̄) |
 | `i_xx`, `i_yy`, `i_zz` | kg·m² | Moments of inertia |
 | `i_xz` | kg·m² | Product of inertia (default: 0) |
+| `max_thrust` | N | Maximum static thrust (default: 0) |
 
 #### Output coefficients
 
@@ -99,22 +100,46 @@ calc-aero flight.bin aircraft.json --rho 1.1         # fixed air density
 
 The output also includes angle of attack (alpha), sideslip angle (beta), dynamic pressure, and airspeed. Data points with dynamic pressure below 10 Pa (ground/taxi) are masked as NaN.
 
+## Project structure
+
+```
+src/acc/
+├── aero/                   # Aerodynamics computation
+│   ├── compute_coefficients.py  # Main coefficient pipeline
+│   ├── frames.py                # Reference frame transforms (NED↔body↔wind)
+│   └── physics.py               # Airspeed, density, moments, normalization
+├── log_parser/             # ArduPilot .bin log parsing
+│   ├── ardupilot.py             # Log parsing & flight state extraction
+│   └── common.py                # Shared field extraction utilities
+├── model/                  # Data models (Pydantic)
+│   ├── aero_coefficients.py     # AeroCoefficients result container
+│   ├── aircraft_model.py        # AircraftModel (mass, geometry, inertia)
+│   ├── atmosphere_model.py      # AtmosphereModel (density, ISA offset)
+│   └── flight_state.py          # FlightState (unified time-series data)
+├── plotting/               # Visualization
+│   ├── common.py                # Reusable plot helpers (time series, 3D, subplots)
+│   └── plot_log.py              # Log plotting presets (att, gps, imu, baro)
+├── calc_aero.py            # calc-aero CLI command
+└── cli.py                  # parse-log / plot-log CLI commands
+```
+
 ## Python API
 
 ```python
-from acc.log_parser import parse_log
-from acc.aero import compute_from_log
-from acc.models import AircraftConfig
+from acc.log_parser import parse_log, compute_from_log
+from acc.model.aircraft_model import AircraftModel
+from acc.model.atmosphere_model import AtmosphereModel
 
 log_data = parse_log("flight.bin")
 
-aircraft = AircraftConfig(
+aircraft = AircraftModel(
     mass=1.5, wing_area=0.35, wing_span=1.4,
     mean_aero_chord=0.25,
     i_xx=0.029, i_yy=0.031, i_zz=0.055, i_xz=0.002,
 )
+atmosphere = AtmosphereModel()
 
-result = compute_from_log(log_data, aircraft)
+result = compute_from_log(log_data, aircraft, atmosphere)
 
 # result.cl, result.cd, result.cy — force coefficients
 # result.c_roll, result.cm, result.cn — moment coefficients
