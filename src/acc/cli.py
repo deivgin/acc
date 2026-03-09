@@ -2,8 +2,9 @@
 
 import argparse
 
-from acc import calc_aero, plot_log
+from acc import calc_aero
 from acc.log_parser import ardupilot as parse_log_cmd
+from acc.plotting import plot_log
 
 
 def main() -> None:

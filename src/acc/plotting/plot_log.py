@@ -4,8 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from acc import plotting
 from acc.log_parser import parse_log
+from acc.plotting import common as plotting
 
 PRESETS = {
     "att": {
