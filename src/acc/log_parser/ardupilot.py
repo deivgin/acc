@@ -125,6 +125,22 @@ def _interpolate_to_common_time(
         throttle_i = np.interp(t_att, t_ctun, thr_out / 100.0)
         result["throttle"] = throttle_i
 
+    # ARSP airspeed (optional) — used by the wind observer (Johansen 2015).
+    # ArduPilot 4.x uses TimeUS (microseconds); older firmware uses TimeMS.
+    # The logged value is total airspeed V_a (m/s) from the pitot tube.
+    # For a fixed-mount pitot at typical UAV AOA (< 15°), V_a ≈ u_r (body-x
+    # airspeed component) and is used directly as u_r^m in the KF.
+    if "ARSP" in log_data and log_data["ARSP"]:
+        arsp_rows = log_data["ARSP"]
+        sample = arsp_rows[0]
+        if "TimeUS" in sample:
+            t_arsp, airspeed = extract_time_and_field(
+                arsp_rows, "Airspeed", time_field="TimeUS", time_scale=1e-6
+            )
+        else:
+            t_arsp, airspeed = extract_time_and_field(arsp_rows, "Airspeed")
+        result["pitot_airspeed"] = np.interp(t_att, t_arsp, airspeed)
+
     return result
 
 

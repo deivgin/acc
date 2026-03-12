@@ -21,4 +21,5 @@ class FlightState(BaseModel):
     v_east: np.ndarray
     v_down: np.ndarray
     altitude: np.ndarray
-    throttle: np.ndarray | None = None  # normalized 0–1
+    throttle: np.ndarray | None = None        # normalized 0–1
+    pitot_airspeed: np.ndarray | None = None  # longitudinal airspeed u_r^m (m/s)

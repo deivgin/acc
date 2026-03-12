@@ -52,61 +52,78 @@ def _piecewise_profile(t: np.ndarray, v1: float, v2: float, v3: float) -> np.nda
 
 
 def generate_flight_data(
-    dt: float = 0.02, noise_scale: float = 0.0
+    dt: float = 0.02,
+    noise_scale: float = 0.0,
+    wind_ned: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> dict[str, list[dict[str, float]]]:
     """Generate synthetic flight log data matching parse_log() output format.
 
     Args:
         dt: Sample period in seconds (default 50 Hz).
         noise_scale: Multiplier for sensor noise (0 = no noise).
+        wind_ned: Constant wind vector (north, east, down) in m/s added to GPS
+            ground velocity to simulate ambient wind.  The ARSP pitot reading
+            still reflects only the airspeed (wind-relative) component.
 
     Returns:
-        Dict with ATT, IMU, GPS, CTUN message lists matching parse_log() format.
+        Dict with ATT, IMU, GPS, CTUN, ARSP message lists matching
+        parse_log() format.
     """
     times = np.arange(0, 30.0 + dt, dt)
     n = len(times)
 
-    # --- Build flight parameter profiles ---
-    v_ground = _piecewise_profile(times, 15.0, 20.0, 15.0)
+    # --- Build flight parameter profiles (airspeed / aircraft frame) ---
+    airspeed_mag = _piecewise_profile(times, 15.0, 20.0, 15.0)
     alpha_deg = _piecewise_profile(times, 5.0, 3.0, 8.0)
     throttle_pct = _piecewise_profile(times, 50.0, 40.0, 75.0)
-    vz = _piecewise_profile(times, 0.0, 0.0, 2.0)  # climb rate, positive up
+    climb_rate_air = _piecewise_profile(times, 0.0, 0.0, 2.0)
 
     alpha_rad = np.radians(alpha_deg)
 
-    # NED velocities (flying north, wings level)
-    v_north = v_ground
-    # v_east = np.zeros(n)
-    v_down = -vz  # NED convention: down is positive
+    # Airspeed NED components (flying north through the air mass, wings level)
+    airspeed_north = airspeed_mag
+    airspeed_down = -climb_rate_air  # NED: down is positive
 
-    # Pitch angle (theta) from desired alpha and velocity components
-    # Derived from: alpha = atan2(w, u) with body velocities from NED rotation
-    # tan(theta) = (tan(alpha) * v_n - v_d) / (v_n + tan(alpha) * v_d)
+    # Pitch angle from desired alpha and airspeed components
     tan_a = np.tan(alpha_rad)
-    theta = np.arctan2(tan_a * v_north - v_down, v_north + tan_a * v_down)
+    theta = np.arctan2(
+        tan_a * airspeed_north - airspeed_down,
+        airspeed_north + tan_a * airspeed_down,
+    )
 
     # Altitude: integrate climb rate
-    altitude = 100.0 + np.cumsum(vz * dt)
-    altitude = np.concatenate(([100.0], altitude[:-1]))  # shift so t=0 starts at 100
+    altitude = 100.0 + np.cumsum(climb_rate_air * dt)
+    altitude = np.concatenate(([100.0], altitude[:-1]))
 
-    # --- IMU specific force ---
-    # a_specific = R_body_NED * (a_NED - g_NED)
-    # For phi=0, psi=0:
-    #   AccX = cos(theta) * dvn/dt - sin(theta) * (dvd/dt - g)
-    #   AccZ = sin(theta) * dvn/dt + cos(theta) * (dvd/dt - g)
-    dvn_dt = np.gradient(v_north, times)
-    dvd_dt = np.gradient(v_down, times)
+    # --- IMU specific force (depends on airspeed derivatives) ---
+    # For a constant wind, d(airspeed)/dt = d(ground_vel)/dt, so the
+    # accelerometer readings are identical to the zero-wind case.
+    d_airspeed_north = np.gradient(airspeed_north, times)
+    d_airspeed_down = np.gradient(airspeed_down, times)
     ct = np.cos(theta)
     st = np.sin(theta)
 
-    acc_x = ct * dvn_dt - st * (dvd_dt - G)
+    acc_x = ct * d_airspeed_north - st * (d_airspeed_down - G)
     acc_y = np.zeros(n)
-    acc_z = st * dvn_dt + ct * (dvd_dt - G)
+    acc_z = st * d_airspeed_north + ct * (d_airspeed_down - G)
 
-    # Gyroscope: only pitch rate is nonzero (wings level, heading constant)
+    # Gyroscope (wings level, heading constant)
     gyr_x = np.zeros(n)
     gyr_y = np.gradient(theta, times)
     gyr_z = np.zeros(n)
+
+    # Pitot body-x airspeed: d1^T · R_nb · airspeed^NED  (phi=psi=0)
+    pitot_airspeed = ct * airspeed_north - st * airspeed_down
+
+    # GPS ground velocity = airspeed + wind
+    wind_north, wind_east, wind_down = wind_ned
+    gps_north = airspeed_north + wind_north
+    gps_east = np.full(n, wind_east)
+    gps_down = airspeed_down + wind_down
+
+    ground_speed_2d = np.sqrt(gps_north**2 + gps_east**2)
+    ground_course = np.degrees(np.arctan2(gps_east, gps_north)) % 360.0
+    climb_rate_gps = -gps_down  # ArduPilot VZ positive-up
 
     # --- Add sensor noise ---
     rng = np.random.default_rng(42)
@@ -117,12 +134,9 @@ def generate_flight_data(
         gyr_x = gyr_x + rng.normal(0, 0.001 * noise_scale, n)
         gyr_y = gyr_y + rng.normal(0, 0.001 * noise_scale, n)
         gyr_z = gyr_z + rng.normal(0, 0.001 * noise_scale, n)
-        v_ground = v_ground + rng.normal(0, 0.05 * noise_scale, n)
+        ground_speed_2d = ground_speed_2d + rng.normal(0, 0.05 * noise_scale, n)
         altitude = altitude + rng.normal(0, 0.2 * noise_scale, n)
-
-    # GPS ground speed and course
-    ground_speed = np.abs(v_ground)  # ensure non-negative after noise
-    ground_course = np.zeros(n)  # heading north = 0°
+        pitot_airspeed = pitot_airspeed + rng.normal(0, 0.05 * noise_scale, n)
 
     # --- Package into parse_log() format ---
     time_ms = (times * 1e3).astype(float)
@@ -151,9 +165,9 @@ def generate_flight_data(
     gps_rows = [
         {
             "T": time_ms[i],
-            "Spd": float(ground_speed[i]),
+            "Spd": float(ground_speed_2d[i]),
             "GCrs": float(ground_course[i]),
-            "VZ": float(vz[i]),
+            "VZ": float(climb_rate_gps[i]),
             "Alt": float(altitude[i]),
         }
         for i in range(n)
@@ -166,7 +180,22 @@ def generate_flight_data(
         for i in range(n)
     ]
 
-    return {"ATT": att_rows, "IMU": imu_rows, "GPS": gps_rows, "CTUN": ctun_rows}
+    # ARSP: pitot measures body-x airspeed component u_r (not ground velocity)
+    arsp_rows = [
+        {
+            "TimeMS": time_ms[i],
+            "Airspeed": float(pitot_airspeed[i]),
+        }
+        for i in range(n)
+    ]
+
+    return {
+        "ATT": att_rows,
+        "IMU": imu_rows,
+        "GPS": gps_rows,
+        "CTUN": ctun_rows,
+        "ARSP": arsp_rows,
+    }
 
 
 def main() -> int:
@@ -183,10 +212,15 @@ def main() -> int:
     )
     atmosphere = AtmosphereModel(rho=None, temperature_offset=0.0)
 
-    # Generate synthetic flight data
-    log_data = generate_flight_data(dt=0.02, noise_scale=0.0)
+    # Generate synthetic flight data.  The ARSP channel activates the Johansen
+    # wind observer.  For this straight-level profile the wind observer
+    # converges gamma → 1 and wind → 0 immediately (no yaw variation).
+    # To validate the KF with non-zero wind, real flight logs with figure-8 or
+    # circular patterns (as used in Johansen 2015) are required.
+    WIND = (0.0, 0.0, 0.0)
+    log_data = generate_flight_data(dt=0.02, noise_scale=0.0, wind_ned=WIND)
 
-    # Run pipeline
+    # Run pipeline (wind observer activates automatically via ARSP data)
     result = compute_from_log(log_data, aircraft, atmosphere)
 
     # --- Print results table ---
@@ -232,6 +266,16 @@ def main() -> int:
     cm_val = result.cm[idx]
     cn_val = result.cn[idx]
 
+    # Wind observer sanity checks — verifies the KF ran and is well-behaved.
+    # Full wind-convergence validation requires attitude-varying manoeuvres.
+    wind_checks: list[tuple[str, bool, float]] = []
+    if result.wind_estimate is not None:
+        wind_est = result.wind_estimate
+        gamma_mid = wind_est.gamma[idx]
+        wind_checks = [
+            ("gamma → 1.0", abs(gamma_mid - 1.0) < 0.05, gamma_mid),
+        ]
+
     checks = [
         ("CL ~ 0.40", abs(cl - 0.40) < 0.02, cl),
         ("CD ~ 0.07", abs(cd - 0.07) < 0.01, cd),
@@ -239,6 +283,7 @@ def main() -> int:
         ("beta ~ 0 deg", abs(beta_val) < 0.1, beta_val),
         ("Cm ~ 0 (steady)", abs(cm_val) < 0.01, cm_val),
         ("Cn ~ 0 (steady)", abs(cn_val) < 0.01, cn_val),
+        *wind_checks,
     ]
 
     all_pass = True

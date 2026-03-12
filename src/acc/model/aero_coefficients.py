@@ -1,5 +1,11 @@
+from __future__ import annotations
+
+from typing import Optional
+
 import numpy as np
 from pydantic import BaseModel, ConfigDict
+
+from acc.model.wind_estimate import WindEstimate
 
 
 class AeroCoefficients(BaseModel):
@@ -16,3 +22,4 @@ class AeroCoefficients(BaseModel):
     beta: np.ndarray
     dynamic_pressure: np.ndarray
     airspeed: np.ndarray
+    wind_estimate: Optional[WindEstimate] = None

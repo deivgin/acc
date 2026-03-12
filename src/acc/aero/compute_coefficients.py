@@ -11,6 +11,7 @@ from acc.aero.physics import (
     compute_thrust,
     normalize_coefficients,
 )
+from acc.aero.wind_observer import estimate_wind
 from acc.model.aero_coefficients import AeroCoefficients
 from acc.model.aircraft_model import AircraftModel
 from acc.model.atmosphere_model import AtmosphereModel
@@ -22,11 +23,27 @@ def compute_coefficients(
     aircraft: AircraftModel,
     atmosphere: AtmosphereModel,
 ) -> AeroCoefficients:
-    # Step 1: NED to body velocity
+    # Wind correction (Johansen 2015).
+    # When pitot airspeed is available, run the linear time-varying KF to
+    # estimate 3-D wind velocity and subtract it from the GPS ground velocity
+    # before rotating to body frame.  Without pitot data, GPS ground velocity
+    # is used directly as a fallback (equivalent to assuming zero wind).
+    wind = None
+    if state.pitot_airspeed is not None:
+        wind = estimate_wind(state)
+        v_north_air = wind.v_rel_north
+        v_east_air = wind.v_rel_east
+        v_down_air = wind.v_rel_down
+    else:
+        v_north_air = state.v_north
+        v_east_air = state.v_east
+        v_down_air = state.v_down
+
+    # Step 1: NED to body velocity (wind-relative)
     u, v, w = ned_to_body(
-        state.v_north,
-        state.v_east,
-        state.v_down,
+        v_north_air,
+        v_east_air,
+        v_down_air,
         state.phi,
         state.theta,
         state.psi,
@@ -98,4 +115,5 @@ def compute_coefficients(
         beta=beta,
         dynamic_pressure=q_dyn,
         airspeed=v_tas,
+        wind_estimate=wind,
     )
